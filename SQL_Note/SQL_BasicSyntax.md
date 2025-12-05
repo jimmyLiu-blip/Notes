@@ -3,6 +3,20 @@
 > 主題：SQL 基礎語法與實務邏輯練習
 
 ---
+![alt text](image-3.png)
+![alt text](image-7.png)
+![alt text](image-8.png)
+![alt text](image-2.png)
+![alt text](image-1.png)
+![alt text](image-4.png)
+![alt text](image-6.png)
+![alt text](image-9.png)
+![alt text](image-10.png)
+![alt text](image-13.png)
+![alt text](image-14.png)
+![alt text](image-15.png)
+![alt text](image-16.png)
+![alt text](image-17.png)
 
 ## 🧩 一、基本查詢語法
 
@@ -72,6 +86,10 @@ BETWEEN：介於兩數之間（含上下限）
 
 ```
 --------
+STR() 是 MSSQL 的數字轉字串函數，比 CAST 簡單
+
+CONCAT() 更直觀，自動處理型別轉換
+
 
 ## 🔍 五、字串處理
 
@@ -154,6 +172,7 @@ WHERE (area > 3000000) XOR (population > 250000000);
 僅符合其中之一的條件會被選出
 
 可用於「只要面積大或人口多，但不能同時成立」的情境
+如果XOR不能使用，就要自己排除狀況
 
 ```
 --------
@@ -164,12 +183,13 @@ SELECT name,
 FROM world
 WHERE gdp >= 1000000000000;
 
-
 gdp / population：人均 GDP
 
 ROUND(..., -3)：四捨五入至千位（最接近 $1000）
 ```
+
 --------
+
 
 ## 九、布林排序（Boolean Sorting）
 ```sql
@@ -186,6 +206,7 @@ ORDER BY 會先依 0 → 1 排序，因此「非 Chemistry / Physics」會先出
 
 ```
 --------
+
 
 ## 十、CASE WHEN 條件分類
 ```sql
@@ -500,7 +521,7 @@ WHERE CAST(w1.population AS BIGINT) >
 
 💡 說明：
 
-CAST(... AS BIGINT)：防止整數溢位。
+CAST(... AS BIGINT)：防止整數溢位。 注意Cast後面一定要有括號
 
 內層查詢：取「同洲中除自己外最大的人口」＝第二大。
 
