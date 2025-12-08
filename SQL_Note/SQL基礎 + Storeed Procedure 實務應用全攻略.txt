@@ -1,0 +1,413 @@
+1.
+USE 資料表名稱;   => 切換資料庫，確保目前正在使用它
+
+2.
+建立表單 CREATE TABLE ... 
+=>
+CREATE TABLE Countries
+(
+	Id INT IDENTITY(1,1) PRIMARY KEY,
+	Name NVARCHAR(100) NOT NULL,
+	Population BIGINT NULL
+);
+
+3.
+插入資料 INSERT INTO ... VALUES
+INSERT INTO Countries(Name, Population) VALUES
+('Taiwan', 23500000),
+('Japan', 126000000),
+('USA', 331000000),
+('Estonia', 1330000);這裡要注意
+
+4.
+建立表單後，想加入設定預設值
+ALTER TABLE Products
+ADD CONSTRAINT DF_Products_CreateDate 
+DEFAULT GETDATE() FOR CreateDate;
+
+ALTER TABLE Products
+ADD CONSTRAINT DF_Products_Price 
+DEFAULT 0 FOR Price;
+
+專案中會建成這樣（內建 default）：
+CREATE TABLE Products(
+    ProductId INT IDENTITY(1,1) PRIMARY KEY,
+    ProductName NVARCHAR(100) NOT NULL,
+    Price DECIMAL(10,2) NOT NULL CONSTRAINT DF_Products_Price DEFAULT 0,
+    Stock INT NOT NULL DEFAULT 0,
+    CreateDate DATETIME NOT NULL CONSTRAINT DF_Products_CreateDate DEFAULT GETDATE()
+);
+
+👇示範：
+CREATE TABLE Products(
+    ProductId      INT IDENTITY(1,1) PRIMARY KEY,
+    ProductName    NVARCHAR(100) NOT NULL,
+    Price          DECIMAL(10,2) NOT NULL DEFAULT 0,
+    Stock          INT NOT NULL DEFAULT 0,
+    CreateDate     DATETIME NOT NULL DEFAULT GETDATE()
+);
+
+4.5
+建立table時沒有指定PK、FK，使用ALTER TABLE補上
+ALTER TABLE Customers
+ADD CONSTRAINT PK_Customers
+PRIMARY KEY (CustomerId);
+
+ALTER TABLE Orders
+ADD CONSTRAINT PK_Orders
+PRIMARY KEY (OrderId);
+
+ALTER TABLE Orders 
+ADD CONSTRAINT FK_Orders_Customers 
+FOREIGN KEY (CustomerId)
+REFERENCES Customers(CustomerId);
+
+
+5.
+刪除
+DELETE FROM Products
+WHERE ProductedName = 'Pixel10';
+
+6.
+選取可以使用TOP + ODER BY
+SELECT TOP(1) ProductedName
+FROM Products
+ORDER BY Stock DESC;
+
+7.
+「更新型」的 Stored Procedure
+
+CREATE PROCEDURE spUpdatePrice
+	@ProductId INT,
+	@NewPrice Decimal(10,2)
+AS
+BEGIN
+	Update Products
+	Set Price = @NewPrice
+	WHERE ProductId = @ProductId
+END;
+
+8.
+新增「同時新增商品並回傳新商品 Id」的 Stored
+CREATE PROCEDURE spAddProductWithId
+	@ProductedName NVARCHAR(100),
+	@Price DECIMAL(10,2),
+	@Stock INT,
+	@NewId INT OUTPUT 
+AS
+BEGIN
+	INSERT INTO Products(ProductedName, Price, Stock) Values(
+	@ProductedName,
+	@Price,
+	@Stock
+	)
+
+	SET @NewId = SCOPE_IDENTITY();
+END
+
+9.
+刪除資料表(一開始創建錯直接砍掉比較快)
+DROP TABLE IF EXISTS Orders;
+
+10.
+查詢每位客戶的訂單總金額（JOIN + GROUP BY）
+SELECT C.CustomerId, C.CustomerName, SUM(Amount) AS TotalAmount
+FROM Customers C
+JOIN Orders O 
+	on C.CustomerId = O.CustomerId
+GROUP BY C.CustomerId, C.CustomerName;
+
+11.
+CREATE PROCEDURE spAddCustomer 
+	@CustomerName NVARCHAR(100), 
+	@Phone NVARCHAR(20) 
+AS 
+BEGIN 
+	INSERT INTO Customers(CustomerName, Phone) 	VALUES( @CustomerName, @Phone ); END;
+執行插入資料要注意：
+EXEC spAddCustomer
+	@CustomerName = N'小小兵',
+	@Phone = '09123456789';
+
+
+12.
+：新增訂單但要先檢查 Customer 是否存在 — 正確答案
+
+CREATE PROCEDURE spAddOrder
+    @CustomerId INT,
+    @Amount DECIMAL(10,2)
+AS
+BEGIN
+    -- Step 1：檢查客戶是否存在
+    IF NOT EXISTS (
+        SELECT 1 
+        FROM Customers 
+        WHERE CustomerId = @CustomerId
+    )
+    BEGIN
+        PRINT 'CustomerId 不存在，無法新增訂單';
+        RETURN;     -- 結束，不插入
+    END
+
+    -- Step 2：客戶存在，才新增訂單
+    INSERT INTO Orders(CustomerId, Amount)
+    VALUES (@CustomerId, @Amount);
+END;
+GO
+
+13.
+刪除Store Procedure
+DROP PROCEDURE IF EXISTS spAddOrder;
+
+14.
+原本建立的Store Procedure錯誤or需要修正
+
+ALTER PROCEDURE spAddOrder
+    @CustomerId INT,
+    @Amount DECIMAL(10,2)
+AS
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 
+        FROM Customers 
+        WHERE CustomerId = @CustomerId
+    )
+    BEGIN
+        PRINT 'Customer 不存在';
+        RETURN;
+    END
+
+    INSERT INTO Orders(CustomerId, Amount)
+    VALUES(@CustomerId, @Amount);
+END;
+
+15.
+建立可輸入 CustomerId 查詢該顧客所有訂單的儲存程
+
+ALTER PROCEDURE spGetOrdersByCustomer
+    @CustomerId INT
+AS
+BEGIN
+    SELECT C.CustomerName, O.OrderId, O.Amount, O.OrderDate
+    FROM Customers C
+    LEFT JOIN Orders O ON C.CustomerId = O.CustomerId
+    WHERE C.CustomerId = @CustomerId
+END;
+
+16.
+OUTPUT流程
+
+CREATE PROCEDURE spReturnNumber
+    @Result INT OUTPUT
+AS
+BEGIN
+    SET @Result = 168;
+END;
+GO
+
+DECLARE @MyNum INT;
+EXEC spReturnNumber @Result = @MyNum OUTPUT;
+SELECT @MyNum AS ReturnedValue;
+
+17.
+ALTER PROCEDURE spAddOrderWithId 
+	@CustomerId INT, 
+	@Amount Decimal(10,2), 
+	@NewOrderId INT OUTPUT 
+AS 
+BEGIN 
+	IF NOT EXISTS( 
+	SELECT 1 
+	FROM Customers 
+	WHERE CustomerId = @CustomerId) 
+	BEGIN 
+		PRINT '顧客不存在'; 
+		RETURN; 
+	END 
+
+	INSERT INTO Orders(CustomerId, Amount) 
+	VALUES (@CustomerId, @Amount); 
+	SET @NewOrderId = SCOPE_IDENTITY(); 
+	END; 
+
+	DECLARE @Id INT; 
+	
+	EXEC spAddOrderWithId @CustomerId = 5, @Amount = 66666, @NewOrderId = @Id OUTPUT; 
+	
+	SELECT @Id AS NewOrderId;
+
+18.
+查詢消費總金額前 N 名顧客（使用 TOP(@TopN)）
+ALTER PROCEDURE spTopCustomersByAmount
+    @TopN INT
+AS
+BEGIN
+    SELECT TOP(@TopN) 
+        C.CustomerId,
+        C.CustomerName, 
+        SUM(O.Amount) AS Total_Amount
+    FROM Customers C
+    JOIN Orders O ON C.CustomerId = O.CustomerId
+    GROUP BY C.CustomerId, C.CustomerName
+    ORDER BY Total_Amount DESC;
+END;
+
+19.
+
+可選條件搜尋訂單（進階實戰）_目前難度最高
+
+ALTER PROCEDURE spSearchOrders
+	@CustomerName NVARCHAR(100) = NULL,
+	@MinAmount DECIMAL(10,2) = NULL,
+	@MaxAmount DECIMAL(10,2) = NULL
+AS
+BEGIN
+	SELECT C.CustomerName, O.OrderId, O.Amount, O.OrderDate
+	FROM Customers C
+	JOIN Orders O ON C.CustomerId = O.CustomerId
+	WHERE (@CustomerName IS NULL OR C.CustomerName LIKE '%' + @CustomerName + '%')
+	AND (@MinAmount IS NULL OR O.Amount >= @MinAmount)
+	AND (@MaxAmount IS NULL OR O.Amount <= @MaxAmount)
+END;
+	
+20.
+
+ALTER PROCEDURE spUpdateCustomerInfo 
+	@CustomerId INT, 
+	@CustomerName NVARCHAR(100) = NULL, 
+	@Phone NVARCHAR(20) = NULL 
+AS 
+BEGIN 
+	IF NOT EXISTS( 
+	SELECT 1 FROM Customers 
+	WHERE CustomerId = @CustomerId) 
+	BEGIN 
+		PRINT'客戶不存在'; 
+		RETURN; 
+	END 
+
+	IF @CustomerName IS NULL AND @Phone IS NULL 
+	BEGIN 
+		PRINT '沒有資料可以更新'; 
+		RETURN; 
+	END 
+
+	Update Customers 
+	SET 
+		CustomerName = COALESCE(@CustomerName, CustomerName), 
+		Phone = COALESCE(@Phone, Phone) 
+	WHERE CustomerId = @CustomerId; 
+	PRINT '更新成功'; 
+
+END;
+
+21.
+
+顧客不存在 → 結束
+顧客有訂單 → 結束
+顧客存在、無訂單 → 刪除 + 印出成功
+
+ALTER PROCEDURE spDeleteCustomer
+    @CustomerId INT
+AS
+BEGIN
+    IF NOT EXISTS(
+        SELECT 1
+        FROM Customers
+        WHERE CustomerId = @CustomerId
+    )
+    BEGIN
+        PRINT '顧客不存在';
+        RETURN;
+    END
+
+    IF EXISTS(
+        SELECT 1
+        FROM Orders
+        WHERE CustomerId = @CustomerId
+    )
+    BEGIN
+        PRINT '顧客仍有訂單，不能刪除';
+        RETURN;
+    END
+
+    DELETE FROM Customers
+    WHERE CustomerId = @CustomerId;
+
+    PRINT '刪除成功';
+END;
+
+⭐ Day 1：基礎 CRUD Stored Procedures（入門）
+
+目標：學會寫最基本的新增、修改、刪除、查詢 SP
+
+內容包含：
+
+建立資料庫 & 表格（Customers、Orders）
+
+建立基礎查詢 SP（SELECT *）
+
+建立新增 SP（INSERT）
+
+建立更新 SP（UPDATE）
+
+建立刪除 SP（DELETE）
+
+基礎輸入參數（@Name、@Price…）
+
+基礎 OUTPUT 用法（SCOPE_IDENTITY）
+
+你完成的題目：
+✔ spGetAllCustomers
+✔ spAddCustomer
+✔ spAddOrder
+✔ spAddProductWithId（OUTPUT + SCOPE_IDENTITY）
+
+Day1 成果：你已能獨立寫基本的 CRUD Stored Procedure。
+
+⭐ Day 2：條件查詢、錯誤處理、複合商業邏輯（你目前已完成 1～10 題）
+
+目標：寫出具備商業邏輯的 Stored Procedure
+
+Day2 核心技能：
+
+IF / BEGIN / END / RETURN 控制流程
+
+EXISTS / NOT EXISTS
+
+動態搜尋（可選條件）
+
+部分更新（COALESCE）
+
+ORDER BY + TOP(@N)
+
+檢查外鍵（Orders → Customers）
+
+不合法操作的阻擋（例如顧客有訂單不能刪除）
+
+你完成的題目：
+
+1️⃣ spGetOrdersByCustomer
+2️⃣ spGetOrdersAboveAmount
+3️⃣ spGetOrdersByDateRange
+4️⃣ spUpdateCustomerPhone
+5️⃣ spAddOrderWithId（OUTPUT + SCOPE_IDENTITY）
+6️⃣ spGetLatestOrder
+7️⃣ spTopCustomersByAmount
+8️⃣ spSearchOrders（動態搜尋）
+9️⃣ spUpdateCustomerInfo（COALESCE、部分更新）
+🔟 spDeleteCustomer（外鍵檢查、防呆設計）
+
+Day2 成果：
+✔ 你已經可以寫出「公司專案等級」的 Stored Procedure。
+✔ 能避免誤刪資料、誤更新全部資料。
+✔ 能寫動態條件查詢（企業中非常常用）
+
+22.
+創建table時，如果欄位屬性需要修正或變更：
+ALTER TABLE Products
+	ADD CONSTRAINT DF_Products_Price DEFAULT 2000 for Price;
+
+如果要刪除原本的Default：
+ALTER TABLE Products
+DROP CONSTRAINT DF_Products_Price;
